@@ -5,7 +5,7 @@ import json
 
 # pydantic concepts
 from pydantic import BaseModel,Field,computed_field
-from typing import Annotated,Literal
+from typing import Annotated,Literal,Optional
 
 app=FastAPI()
 
@@ -35,7 +35,14 @@ class Patient(BaseModel):
             return "normal"
         else:
             return "obese"
-
+# second pydentic model for update
+class PatientsUpdate(BaseModel):
+    name:Annotated[Optional[str],Field(default=None)]
+    city:Annotated[Optional[str],Field(default=None)]
+    age:Annotated[Optional[int],Field(...,gt=0,lt=120,description="age of the patient")]
+    gender:Annotated[Optional[Literal['male','female','other']],Field(default=None)]
+    height:Annotated[Optional[float],Field(default=None,gt=0)]
+    weight:Annotated[Optional[float],Field(default=None,gt=0)]
 
 def dataload():
     with open('data.json','r') as f:
@@ -109,4 +116,47 @@ def create_patient(patient:Patient):
     save_data(data)
 
     return JSONResponse(status_code=201,content={"message":"patient created successfully"})
+
+
+
+# update and delete patients
+@app.put('/edit/{patient_id}')
+def update_patient(patient_id:str,patient_update:PatientsUpdate):
+    data=dataload()
+    if patient_id  not in data:
+        raise HTTPException(status_code=404,detail="patient id is not correct")
+    ex_data=data[patient_id]
+    updated_patient_info=patient_update.model_dump(exclude_unset=True) # to dict and exclude_unset=True for given data values include
+
+    for key ,values in updated_patient_info.items():
+        ex_data[key]=values
+
+    # ex_data->pydentic object->updated bmi +verdict -> pydentic object ->dict
+    ex_data['id']=patient_id
+    patient_pydenti_objc=Patient(**ex_data)
+
+    ex_data=patient_pydenti_objc.model_dump(exclude='id')
+    data[patient_id]=ex_data
+
+    # save data
+    save_data(data)
+
+    return JSONResponse(status_code=200,content={"message":"patient updated"})
+
+
+
+
+# delete
+@app.delete("/delete/{patient_id}")
+def delete_patient(patient_id:str):
+
+    # load data
+    data=dataload()
+    if patient_id not in data:
+        raise HTTPException(status_code=404, detail="patients not found")
+    del data[patient_id]
+
+    save_data(data)
+
+    raise JSONResponse(status_code=200, content={"message":"patient delete successfully"})
 
